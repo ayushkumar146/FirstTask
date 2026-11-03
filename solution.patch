@@ -1,0 +1,391 @@
+diff --git a/src/main/java/com/Odin/FirstTask/controller/UserController.java b/src/main/java/com/Odin/FirstTask/controller/UserController.java
+index efa9e95..863d835 100644
+--- a/src/main/java/com/Odin/FirstTask/controller/UserController.java
++++ b/src/main/java/com/Odin/FirstTask/controller/UserController.java
+@@ -3,6 +3,7 @@ package com.Odin.FirstTask.controller;
+ import com.Odin.FirstTask.dto.CreateUserRequest;
+ import com.Odin.FirstTask.dto.UserResponseDto;
+ import com.Odin.FirstTask.service.UserService;
++import jakarta.validation.Valid;
+ import org.springframework.http.HttpStatus;
+ import org.springframework.http.ResponseEntity;
+ import org.springframework.web.bind.annotation.*;
+@@ -20,8 +21,7 @@ public class UserController {
+     }
+ 
+     @PostMapping
+-    public ResponseEntity<UserResponseDto> createUser(@RequestBody CreateUserRequest request) {
+-        // Missing payload validation annotation (@Valid)
++    public ResponseEntity<UserResponseDto> createUser(@Valid @RequestBody CreateUserRequest request) {
+         UserResponseDto response = userService.createUser(request);
+         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+     }
+diff --git a/src/main/java/com/Odin/FirstTask/dto/AddressDto.java b/src/main/java/com/Odin/FirstTask/dto/AddressDto.java
+index 4876b2b..93a6971 100644
+--- a/src/main/java/com/Odin/FirstTask/dto/AddressDto.java
++++ b/src/main/java/com/Odin/FirstTask/dto/AddressDto.java
+@@ -1,5 +1,7 @@
+ package com.Odin.FirstTask.dto;
+ 
++import jakarta.validation.constraints.NotBlank;
++import jakarta.validation.constraints.Pattern;
+ import lombok.AllArgsConstructor;
+ import lombok.Builder;
+ import lombok.Data;
+@@ -10,7 +12,14 @@ import lombok.NoArgsConstructor;
+ @NoArgsConstructor
+ @AllArgsConstructor
+ public class AddressDto {
++
++    @NotBlank(message = "Street is required")
+     private String street;
++
++    @NotBlank(message = "City is required")
+     private String city;
++
++    @NotBlank(message = "Zip code is required")
++    @Pattern(regexp = "^\\d{5}$", message = "Zip code must be a 5-digit number")
+     private String zipCode;
+ }
+diff --git a/src/main/java/com/Odin/FirstTask/dto/CreateUserRequest.java b/src/main/java/com/Odin/FirstTask/dto/CreateUserRequest.java
+index a3b3cba..bf7ca91 100644
+--- a/src/main/java/com/Odin/FirstTask/dto/CreateUserRequest.java
++++ b/src/main/java/com/Odin/FirstTask/dto/CreateUserRequest.java
+@@ -1,5 +1,7 @@
+ package com.Odin.FirstTask.dto;
+ 
++import jakarta.validation.Valid;
++import jakarta.validation.constraints.*;
+ import lombok.AllArgsConstructor;
+ import lombok.Builder;
+ import lombok.Data;
+@@ -10,9 +12,25 @@ import lombok.NoArgsConstructor;
+ @NoArgsConstructor
+ @AllArgsConstructor
+ public class CreateUserRequest {
++
++    @NotBlank(message = "Name is required")
++    @Size(min = 2, max = 50, message = "Name must be between 2 and 50 characters")
+     private String name;
++
++    @NotBlank(message = "Email is required")
++    @Email(message = "Email format is invalid")
+     private String email;
++
++    @NotNull(message = "Age is required")
++    @Min(value = 18, message = "Age must be at least 18")
++    @Max(value = 120, message = "Age must not exceed 120")
+     private Integer age;
++
++    @NotBlank(message = "Role is required")
++    @Pattern(regexp = "USER|ADMIN|MANAGER", message = "Role must be USER, ADMIN, or MANAGER")
+     private String role;
++
++    @NotNull(message = "Address is required")
++    @Valid
+     private AddressDto address;
+ }
+diff --git a/src/main/java/com/Odin/FirstTask/dto/ErrorResponse.java b/src/main/java/com/Odin/FirstTask/dto/ErrorResponse.java
+new file mode 100644
+index 0000000..73e721f
+--- /dev/null
++++ b/src/main/java/com/Odin/FirstTask/dto/ErrorResponse.java
+@@ -0,0 +1,24 @@
++package com.Odin.FirstTask.dto;
++
++import com.fasterxml.jackson.annotation.JsonInclude;
++import lombok.AllArgsConstructor;
++import lombok.Builder;
++import lombok.Data;
++import lombok.NoArgsConstructor;
++
++import java.time.LocalDateTime;
++import java.util.Map;
++
++@Data
++@Builder
++@NoArgsConstructor
++@AllArgsConstructor
++@JsonInclude(JsonInclude.Include.NON_NULL)
++public class ErrorResponse {
++    private LocalDateTime timestamp;
++    private int status;
++    private String error;
++    private String message;
++    private String path;
++    private Map<String, String> errors;
++}
+diff --git a/src/main/java/com/Odin/FirstTask/exception/GlobalExceptionHandler.java b/src/main/java/com/Odin/FirstTask/exception/GlobalExceptionHandler.java
+new file mode 100644
+index 0000000..46a962b
+--- /dev/null
++++ b/src/main/java/com/Odin/FirstTask/exception/GlobalExceptionHandler.java
+@@ -0,0 +1,95 @@
++package com.Odin.FirstTask.exception;
++
++import com.Odin.FirstTask.dto.ErrorResponse;
++import jakarta.servlet.http.HttpServletRequest;
++import org.springframework.http.HttpStatus;
++import org.springframework.http.ResponseEntity;
++import org.springframework.http.converter.HttpMessageNotReadableException;
++import org.springframework.validation.FieldError;
++import org.springframework.web.bind.MethodArgumentNotValidException;
++import org.springframework.web.bind.annotation.ExceptionHandler;
++import org.springframework.web.bind.annotation.RestControllerAdvice;
++
++import java.time.LocalDateTime;
++import java.util.HashMap;
++import java.util.Map;
++
++@RestControllerAdvice
++public class GlobalExceptionHandler {
++
++    @ExceptionHandler(MethodArgumentNotValidException.class)
++    public ResponseEntity<ErrorResponse> handleValidationException(
++            MethodArgumentNotValidException ex, HttpServletRequest request) {
++        Map<String, String> errors = new HashMap<>();
++        for (FieldError fieldError : ex.getBindingResult().getFieldErrors()) {
++            errors.put(fieldError.getField(), fieldError.getDefaultMessage());
++        }
++
++        ErrorResponse errorResponse = ErrorResponse.builder()
++                .timestamp(LocalDateTime.now())
++                .status(HttpStatus.BAD_REQUEST.value())
++                .error(HttpStatus.BAD_REQUEST.getReasonPhrase())
++                .message("Validation failed for one or more fields")
++                .path(request.getRequestURI())
++                .errors(errors)
++                .build();
++
++        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
++    }
++
++    @ExceptionHandler(HttpMessageNotReadableException.class)
++    public ResponseEntity<ErrorResponse> handleMalformedJson(
++            HttpMessageNotReadableException ex, HttpServletRequest request) {
++        ErrorResponse errorResponse = ErrorResponse.builder()
++                .timestamp(LocalDateTime.now())
++                .status(HttpStatus.BAD_REQUEST.value())
++                .error(HttpStatus.BAD_REQUEST.getReasonPhrase())
++                .message("Malformed JSON request payload or invalid parameter format")
++                .path(request.getRequestURI())
++                .build();
++
++        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
++    }
++
++    @ExceptionHandler(IllegalArgumentException.class)
++    public ResponseEntity<ErrorResponse> handleIllegalArgument(
++            IllegalArgumentException ex, HttpServletRequest request) {
++        ErrorResponse errorResponse = ErrorResponse.builder()
++                .timestamp(LocalDateTime.now())
++                .status(HttpStatus.BAD_REQUEST.value())
++                .error(HttpStatus.BAD_REQUEST.getReasonPhrase())
++                .message(ex.getMessage())
++                .path(request.getRequestURI())
++                .build();
++
++        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
++    }
++
++    @ExceptionHandler(UserNotFoundException.class)
++    public ResponseEntity<ErrorResponse> handleUserNotFound(
++            UserNotFoundException ex, HttpServletRequest request) {
++        ErrorResponse errorResponse = ErrorResponse.builder()
++                .timestamp(LocalDateTime.now())
++                .status(HttpStatus.NOT_FOUND.value())
++                .error(HttpStatus.NOT_FOUND.getReasonPhrase())
++                .message(ex.getMessage())
++                .path(request.getRequestURI())
++                .build();
++
++        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
++    }
++
++    @ExceptionHandler(Exception.class)
++    public ResponseEntity<ErrorResponse> handleGenericException(
++            Exception ex, HttpServletRequest request) {
++        ErrorResponse errorResponse = ErrorResponse.builder()
++                .timestamp(LocalDateTime.now())
++                .status(HttpStatus.INTERNAL_SERVER_ERROR.value())
++                .error(HttpStatus.INTERNAL_SERVER_ERROR.getReasonPhrase())
++                .message("An unexpected error occurred: " + ex.getMessage())
++                .path(request.getRequestURI())
++                .build();
++
++        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
++    }
++}
+diff --git a/src/test/java/com/Odin/FirstTask/UserControllerIntegrationTest.java b/src/test/java/com/Odin/FirstTask/UserControllerIntegrationTest.java
+new file mode 100644
+index 0000000..8d72355
+--- /dev/null
++++ b/src/test/java/com/Odin/FirstTask/UserControllerIntegrationTest.java
+@@ -0,0 +1,167 @@
++package com.Odin.FirstTask;
++
++import org.junit.jupiter.api.DisplayName;
++import org.junit.jupiter.api.Test;
++import org.springframework.beans.factory.annotation.Autowired;
++import org.springframework.boot.test.context.SpringBootTest;
++import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
++import org.springframework.http.MediaType;
++import org.springframework.test.web.servlet.MockMvc;
++
++import static org.hamcrest.Matchers.*;
++import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
++import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
++import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
++
++@SpringBootTest
++@AutoConfigureMockMvc
++class UserControllerIntegrationTest {
++
++    @Autowired
++    private MockMvc mockMvc;
++
++    @Test
++    @DisplayName("POST /api/v1/users - Success: returns 201 Created for valid payload")
++    void createUser_validPayload_returnsCreated() throws Exception {
++        String validJson = """
++                {
++                  "name": "Alice Smith",
++                  "email": "alice.smith@example.com",
++                  "age": 28,
++                  "role": "USER",
++                  "address": {
++                    "street": "100 Market St",
++                    "city": "San Francisco",
++                    "zipCode": "94105"
++                  }
++                }
++                """;
++
++        mockMvc.perform(post("/api/v1/users")
++                        .contentType(MediaType.APPLICATION_JSON)
++                        .content(validJson))
++                .andExpect(status().isCreated())
++                .andExpect(jsonPath("$.id", notNullValue()))
++                .andExpect(jsonPath("$.name", is("Alice Smith")))
++                .andExpect(jsonPath("$.email", is("alice.smith@example.com")))
++                .andExpect(jsonPath("$.age", is(28)))
++                .andExpect(jsonPath("$.role", is("USER")))
++                .andExpect(jsonPath("$.address.city", is("San Francisco")));
++    }
++
++    @Test
++    @DisplayName("POST /api/v1/users - Validation: returns 400 Bad Request when required fields are missing")
++    void createUser_missingFields_returnsBadRequest() throws Exception {
++        String emptyJson = "{}";
++
++        mockMvc.perform(post("/api/v1/users")
++                        .contentType(MediaType.APPLICATION_JSON)
++                        .content(emptyJson))
++                .andExpect(status().isBadRequest())
++                .andExpect(jsonPath("$.status", is(400)))
++                .andExpect(jsonPath("$.error", is("Bad Request")))
++                .andExpect(jsonPath("$.message", containsString("Validation failed")))
++                .andExpect(jsonPath("$.errors.name", notNullValue()))
++                .andExpect(jsonPath("$.errors.email", notNullValue()))
++                .andExpect(jsonPath("$.errors.age", notNullValue()))
++                .andExpect(jsonPath("$.errors.role", notNullValue()))
++                .andExpect(jsonPath("$.errors.address", notNullValue()));
++    }
++
++    @Test
++    @DisplayName("POST /api/v1/users - Boundary: returns 400 Bad Request when age is below 18")
++    void createUser_boundaryAgeBelow18_returnsBadRequest() throws Exception {
++        String underageJson = """
++                {
++                  "name": "Minor User",
++                  "email": "minor@example.com",
++                  "age": 16,
++                  "role": "USER",
++                  "address": {
++                    "street": "123 Maple St",
++                    "city": "Springfield",
++                    "zipCode": "62701"
++                  }
++                }
++                """;
++
++        mockMvc.perform(post("/api/v1/users")
++                        .contentType(MediaType.APPLICATION_JSON)
++                        .content(underageJson))
++                .andExpect(status().isBadRequest())
++                .andExpect(jsonPath("$.status", is(400)))
++                .andExpect(jsonPath("$.errors.age", is("Age must be at least 18")));
++    }
++
++    @Test
++    @DisplayName("POST /api/v1/users - Validation: returns 400 Bad Request for invalid email format")
++    void createUser_invalidEmail_returnsBadRequest() throws Exception {
++        String invalidEmailJson = """
++                {
++                  "name": "Bob Vance",
++                  "email": "invalid-email-no-at-sign",
++                  "age": 45,
++                  "role": "USER",
++                  "address": {
++                    "street": "456 Oak Rd",
++                    "city": "Scranton",
++                    "zipCode": "18503"
++                  }
++                }
++                """;
++
++        mockMvc.perform(post("/api/v1/users")
++                        .contentType(MediaType.APPLICATION_JSON)
++                        .content(invalidEmailJson))
++                .andExpect(status().isBadRequest())
++                .andExpect(jsonPath("$.status", is(400)))
++                .andExpect(jsonPath("$.errors.email", is("Email format is invalid")));
++    }
++
++    @Test
++    @DisplayName("POST /api/v1/users - Nested Validation: returns 400 Bad Request for invalid address zip code")
++    void createUser_invalidZipCode_returnsBadRequest() throws Exception {
++        String invalidZipJson = """
++                {
++                  "name": "Charlie Brown",
++                  "email": "charlie@example.com",
++                  "age": 30,
++                  "role": "USER",
++                  "address": {
++                    "street": "789 Pine Ave",
++                    "city": "Minneapolis",
++                    "zipCode": "ABC"
++                  }
++                }
++                """;
++
++        mockMvc.perform(post("/api/v1/users")
++                        .contentType(MediaType.APPLICATION_JSON)
++                        .content(invalidZipJson))
++                .andExpect(status().isBadRequest())
++                .andExpect(jsonPath("$.status", is(400)))
++                .andExpect(jsonPath("$.errors['address.zipCode']", is("Zip code must be a 5-digit number")));
++    }
++
++    @Test
++    @DisplayName("POST /api/v1/users - Malformed JSON: returns 400 Bad Request for malformed body")
++    void createUser_malformedJson_returnsBadRequest() throws Exception {
++        String malformedJson = "{ \"name\": \"Malformed\", \"age\": \"not_a_number\" }";
++
++        mockMvc.perform(post("/api/v1/users")
++                        .contentType(MediaType.APPLICATION_JSON)
++                        .content(malformedJson))
++                .andExpect(status().isBadRequest())
++                .andExpect(jsonPath("$.status", is(400)))
++                .andExpect(jsonPath("$.message", containsString("Malformed JSON request payload")));
++    }
++
++    @Test
++    @DisplayName("GET /api/v1/users/{id} - Not Found: returns 404 for nonexistent user ID")
++    void getUserById_notFound_returnsNotFound() throws Exception {
++        mockMvc.perform(get("/api/v1/users/999"))
++                .andExpect(status().isNotFound())
++                .andExpect(jsonPath("$.status", is(404)))
++                .andExpect(jsonPath("$.message", containsString("User not found with id: 999")));
++    }
++}
