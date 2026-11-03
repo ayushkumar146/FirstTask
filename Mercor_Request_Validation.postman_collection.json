@@ -1,0 +1,291 @@
+{
+	"info": {
+		"_postman_id": "8f3b4c1a-7b2e-4a6f-9c8d-3e5f2a1b9c8d",
+		"name": "Mercor - Request Validation & Error Handling",
+		"description": "Postman test suite for Mercor task: Debug and resolve request validation failures and missing error responses in Spring Boot REST service.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Step 2 - Probe Endpoints (Before Fix)",
+			"item": [
+				{
+					"name": "1. Valid Payload -> Expect 201 Created",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Jane Doe\",\n  \"email\": \"jane.doe@example.com\",\n  \"age\": 25,\n  \"role\": \"USER\",\n  \"address\": {\n    \"street\": \"123 Main St\",\n    \"city\": \"Springfield\",\n    \"zipCode\": \"12345\"\n  }\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/v1/users",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"v1",
+								"users"
+							]
+						},
+						"description": "Baseline happy path request: creates a new user."
+					},
+					"response": []
+				},
+				{
+					"name": "2. Boundary Age Under 18 -> Catches 500 Internal Server Error",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Minor User\",\n  \"email\": \"minor@example.com\",\n  \"age\": 16,\n  \"role\": \"USER\",\n  \"address\": {\n    \"street\": \"123 Main St\",\n    \"city\": \"Springfield\",\n    \"zipCode\": \"12345\"\n  }\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/v1/users",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"v1",
+								"users"
+							]
+						},
+						"description": "Boundary case: age is 16 (< 18). Before the fix, this triggers an unhandled IllegalArgumentException resulting in HTTP 500."
+					},
+					"response": []
+				},
+				{
+					"name": "3. Missing Required Fields -> Catches 500 Internal Server Error",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"role\": \"USER\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/v1/users",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"v1",
+								"users"
+							]
+						},
+						"description": "Missing payload fields (name, email, age, address). Before fix, triggers NullPointerException or IllegalArgumentException resulting in HTTP 500."
+					},
+					"response": []
+				},
+				{
+					"name": "4. Malformed JSON (Invalid Data Type) -> Raw / Unhandled Error",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Alice\",\n  \"email\": \"alice@example.com\",\n  \"age\": \"not_a_number\",\n  \"role\": \"USER\",\n  \"address\": {\n    \"street\": \"123 Main St\",\n    \"city\": \"Springfield\",\n    \"zipCode\": \"12345\"\n  }\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/v1/users",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"v1",
+								"users"
+							]
+						},
+						"description": "Malformed JSON payload: age passed as string instead of integer. Before fix, returns unformatted error."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Step 4 - Verify Responses (After Fix)",
+			"item": [
+				{
+					"name": "5. Valid Payload -> Verify 201 Created",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Jane Doe\",\n  \"email\": \"jane.doe@example.com\",\n  \"age\": 25,\n  \"role\": \"USER\",\n  \"address\": {\n    \"street\": \"123 Main St\",\n    \"city\": \"Springfield\",\n    \"zipCode\": \"12345\"\n  }\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/v1/users",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"v1",
+								"users"
+							]
+						},
+						"description": "Verify happy path still returns HTTP 201 with created user DTO."
+					},
+					"response": []
+				},
+				{
+					"name": "6. Boundary Age < 18 -> Verify 400 Bad Request with Error Details",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Minor User\",\n  \"email\": \"minor@example.com\",\n  \"age\": 16,\n  \"role\": \"USER\",\n  \"address\": {\n    \"street\": \"123 Main St\",\n    \"city\": \"Springfield\",\n    \"zipCode\": \"12345\"\n  }\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/v1/users",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"v1",
+								"users"
+							]
+						},
+						"description": "Verify boundary case returns HTTP 400 Bad Request with field error: 'Age must be at least 18'."
+					},
+					"response": []
+				},
+				{
+					"name": "7. Missing Required Fields -> Verify 400 Bad Request with Field Errors Map",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"role\": \"INVALID_ROLE\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/v1/users",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"v1",
+								"users"
+							]
+						},
+						"description": "Verify missing/invalid payload returns HTTP 400 Bad Request with structured field error map."
+					},
+					"response": []
+				},
+				{
+					"name": "8. Malformed JSON -> Verify 400 Bad Request with Structured Message",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Alice\",\n  \"email\": \"alice@example.com\",\n  \"age\": \"not_a_number\",\n  \"role\": \"USER\",\n  \"address\": {\n    \"street\": \"123 Main St\",\n    \"city\": \"Springfield\",\n    \"zipCode\": \"12345\"\n  }\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/v1/users",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"v1",
+								"users"
+							]
+						},
+						"description": "Verify malformed JSON returns HTTP 400 Bad Request with 'Malformed JSON request payload or invalid parameter format'."
+					},
+					"response": []
+				},
+				{
+					"name": "9. Get Nonexistent User -> Verify 404 Not Found",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8080/api/v1/users/999",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"v1",
+								"users",
+								"999"
+							]
+						},
+						"description": "Verify 404 handling via GlobalExceptionHandler."
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}
